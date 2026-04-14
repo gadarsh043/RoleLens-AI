@@ -1,4 +1,4 @@
-# RoleLens AI — Project Spec v1.0
+# RoleLens AI — Project Spec v1.1
 
 Technical specification for RoleLens AI: a RAG-based resume and job-fit analysis application.
 
@@ -66,6 +66,7 @@ resume-fit/
 | `POST` | `/api/resume/upload` | Upload PDF → chunk → embed into ChromaDB |
 | `GET` | `/api/resume/status` | Check if resume is indexed |
 | `POST` | `/api/analysis/analyze` | Submit JD → fit score + gaps |
+| `POST` | `/api/analysis/chat` | Ask follow-up questions or paste another JD against the indexed resume |
 | `GET` | `/api/analysis/history` | Past analyses |
 | `POST` | `/api/analysis/report` | Generate PDF summary |
 
@@ -78,7 +79,7 @@ resume-fit/
 3. **Embed** — `all-MiniLM-L6-v2` (~80 MB, downloads once, fully local).
 4. **Store** — ChromaDB saves vectors + raw text + section metadata under `chroma_store/`.
 5. **Retrieve** — JD is embedded; top-5 resume chunks by cosine similarity.
-6. **Generate** — Chunks + JD → **Groq** chat completion → structured JSON response.
+6. **Generate** — Chunks + JD or user question → **Groq** chat completion → structured JSON response.
 
 ---
 
@@ -92,7 +93,7 @@ Each end-user interaction follows this pattern:
 3. The backend **queries ChromaDB** for the nearest resume chunks by cosine similarity.
 4. The backend **retrieves top-k chunks** with section metadata.
 5. The backend sends **the question plus retrieved chunks** to the Groq model.
-6. The model returns an answer **grounded in retrieved data** (JSON for analysis endpoints).
+6. The model returns an answer **grounded in retrieved data** (JSON for analysis endpoints, concise grounded JSON for chat/Q&A).
 
 Implementation notes:
 
@@ -100,6 +101,7 @@ Implementation notes:
 - Chunk metadata (section, similarity or confidence score) is included in the prompt context.
 - A fixed `k` (for example 5) is used initially, then tuned against token budget and quality.
 - When retrieval confidence is low, the system returns a guarded or fallback response instead of a falsely confident answer.
+- The indexed resume remains available after the first analysis so users can ask multiple follow-up questions or compare multiple JDs in sequence.
 
 ---
 
@@ -165,6 +167,7 @@ Two-panel layout: drag-and-drop resume upload (left) + JD textarea with auto-det
 - **Skill match bars** — horizontal bars; green = matched, red = missing; sorted by importance.
 - **Gap heatmap** — table of missing skills with Critical / High / Medium badges.
 - **AI recs panel** — three cards: what to add, how to reframe experience, what to learn.
+- **Chat panel** — ask follow-up questions or paste another JD; each turn re-runs retrieval against the same indexed resume.
 - **Export** — PDF download of full analysis.
 
 ---
@@ -211,7 +214,7 @@ pip install fastapi uvicorn chromadb sentence-transformers pymupdf groq python-d
 
 ## 10. Brainstorm & deployment notes (Groq-only)
 
-- **Single LLM surface** — All generative steps (fit analysis, optional report copy, future “rewrite bullet” features) go through `groq_service.py` so nothing in the repo assumes Claude artifacts or Anthropic message formats.
+- **Single LLM surface** — All generative steps (fit analysis, chat Q&A, optional report copy, future “rewrite bullet” features) go through `groq_service.py` so nothing in the repo assumes Claude artifacts or Anthropic message formats.
 - **RAG-first product behavior** — Responses must always be evidence-backed: retrieval happens before generation, and prompts should include retrieved text + section metadata so outputs stay grounded.
 - **Deploy “fully”** — Frontend: static host (Vercel, Netlify, Cloudflare Pages) or same origin behind nginx; backend: container or PaaS with `GROQ_API_KEY` as a secret; Chroma data must use a **persistent volume** (not ephemeral disk) if analyses must survive process restarts.
 - **Model choice** — Initially, a single Groq model covers all generative tasks; additional models for latency versus quality may be introduced if quotas or latency require it.
@@ -219,4 +222,4 @@ pip install fastapi uvicorn chromadb sentence-transformers pymupdf groq python-d
 
 ---
 
-*Spec version: 1.0 — LLM provider: Groq only.*
+*Spec version: 1.1 — LLM provider: Groq only.*

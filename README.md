@@ -17,6 +17,7 @@ Why it works:
 2. The backend **reads** the PDF, **chunks** it by resume sections, and **embeds** those chunks locally (no embedding API calls).
 3. It **stores** vectors in ChromaDB and **retrieves** the few chunks that best match the job description.
 4. A **Groq**-hosted language model reads those chunks plus the job description and returns a **single JSON report**: fit score, grade, matched vs missing skills, a six-axis “radar” view, prioritized gaps, and short recommendations.
+5. On the **results page**, you can keep asking follow-up questions or paste a new job description against the already indexed resume. Each message runs retrieval again before generation.
 
 The **frontend** turns that into charts and tables: fit ring, radar, skill bars, gap list, and suggested edits—so you can see *where* you’re strong, *what* you’re missing, and *what* to do next.
 
@@ -52,4 +53,58 @@ People applying to roles who want a **fast, visual sanity check** before they ta
 | **sentence-transformers** | Local embeddings |
 | **Groq** | LLM inference for structured analysis |
 
-For file layout, endpoints, prompts, and build steps, see **[Project_Spec.md](./Project_Spec.md)**.
+## Product behavior
+
+- Upload the resume once and keep it indexed in Chroma.
+- Run an initial JD analysis from the home page.
+- Continue on `/results` with follow-up questions or a different JD against the same indexed resume.
+- Every new question or JD triggers retrieval again, so the response stays grounded in resume evidence.
+
+## Quick start
+1. Set up the backend once:
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+2. Set up the frontend once:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+```
+
+3. Install the root runner and start both services:
+
+```bash
+npm install
+npm run rolelens
+```
+
+`npm run rolelens` starts:
+- FastAPI on `http://localhost:8000`
+- Vite on `http://localhost:5173`
+
+Detailed setup docs:
+- Backend: **[backend/README.md](./backend/README.md)**
+- Frontend: **[frontend/README.md](./frontend/README.md)**
+
+## Deployment
+
+- Frontend can be deployed to Netlify from `frontend/`.
+- Backend can be deployed to Railway from `backend/`.
+- For Railway, mount a persistent volume and set:
+  - `CHROMA_PERSIST_PATH=/data/chroma_store`
+  - `UPLOAD_DIR=/data/uploads`
+- Set `CORS_ORIGIN` on Railway to include both local development and your Netlify URL, for example:
+
+```env
+CORS_ORIGIN=http://localhost:5173,https://your-netlify-site.netlify.app
+```
+
+For file layout, endpoints, prompts, and build details, see **[Project_Spec.md](./Project_Spec.md)**.
