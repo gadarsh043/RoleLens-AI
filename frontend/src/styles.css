@@ -463,6 +463,10 @@ button:disabled {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.chat-message.is-loading {
+  min-height: 78px;
+}
+
 .chat-message p {
   margin: 0;
 }
@@ -482,6 +486,13 @@ button:disabled {
   margin-top: 12px;
 }
 
+.source-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .suggestion-chip {
   padding: 6px 10px;
   border-radius: 999px;
@@ -489,6 +500,59 @@ button:disabled {
   border: 1px solid rgba(239, 131, 84, 0.16);
   color: #f2cc8f;
   font-size: 0.82rem;
+}
+
+.source-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(247, 241, 232, 0.08);
+  border: 1px solid rgba(247, 241, 232, 0.1);
+  color: rgba(247, 241, 232, 0.78);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+}
+
+.source-chip.primary {
+  background: rgba(239, 131, 84, 0.14);
+  border-color: rgba(239, 131, 84, 0.22);
+  color: #f2cc8f;
+}
+
+.typing-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.typing-loader span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(242, 204, 143, 0.85);
+  animation: chat-loader-bounce 1s infinite ease-in-out;
+}
+
+.typing-loader span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.typing-loader span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes chat-loader-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
 }
 
 .chat-compose {

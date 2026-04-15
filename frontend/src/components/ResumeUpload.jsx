@@ -1,6 +1,7 @@
 export default function ResumeUpload({
   file,
   indexedResume,
+  chunksIndexed,
   isUploading,
   onFileChange,
   errorMessage,
@@ -32,7 +33,7 @@ export default function ResumeUpload({
         <div className="status-card success">
           <p className="status-title">Indexed resume</p>
           <p className="status-copy">
-            {indexedResume.filename} · {indexedResume.chunks_indexed ?? "?"} chunks
+            {indexedResume.filename} · {chunksIndexed ?? indexedResume.chunks_indexed ?? "?"} chunks
           </p>
           {indexedResume.sections?.length ? (
             <p className="status-meta">Sections: {indexedResume.sections.join(", ")}</p>

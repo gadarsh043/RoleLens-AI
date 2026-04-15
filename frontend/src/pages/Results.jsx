@@ -45,7 +45,7 @@ export default function Results() {
     );
   }
 
-  const { analysis, resume, jobDescription, generatedAt } = payload;
+  const { analysis, resume, generatedAt } = payload;
 
   async function handleAsk() {
     const trimmedInput = chatInput.trim();
@@ -69,6 +69,8 @@ export default function Results() {
         {
           role: "assistant",
           content: response.answer,
+          scope: response.scope ?? "resume",
+          sourceTypes: Array.from(new Set((response.sources ?? []).map((item) => item.source_type))),
           followUpSuggestions: response.follow_up_suggestions ?? [],
         },
       ]);
@@ -101,6 +103,8 @@ export default function Results() {
       const assistantMessage = {
         role: "assistant",
         content: nextAnalysis.summary,
+        scope: "comparison",
+        sourceTypes: ["resume", "job_description"],
         followUpSuggestions: nextAnalysis.recommendations?.slice(0, 3).map((item) => item.title) ?? [],
       };
 
@@ -117,6 +121,15 @@ export default function Results() {
     } finally {
       setIsChatLoading(false);
     }
+  }
+
+  function handleChatKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    handleAsk();
   }
 
   return (
@@ -165,6 +178,7 @@ export default function Results() {
           messages={chatMessages}
           inputValue={chatInput}
           onInputChange={(event) => setChatInput(event.target.value)}
+          onInputKeyDown={handleChatKeyDown}
           onAsk={handleAsk}
           onReanalyze={handleReanalyze}
           isLoading={isChatLoading}
@@ -186,6 +200,8 @@ function buildInitialMessages(payload) {
     {
       role: "assistant",
       content: payload.analysis.summary,
+      scope: "comparison",
+      sourceTypes: ["resume", "job_description"],
       followUpSuggestions:
         payload.analysis.recommendations?.slice(0, 3).map((item) => item.title) ?? [],
     },

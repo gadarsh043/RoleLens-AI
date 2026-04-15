@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = Field(default=5, alias="RETRIEVAL_TOP_K")
     groq_model: str = Field(default="llama-3.3-70b-versatile", alias="GROQ_MODEL")
     retrieval_confidence_floor: float = Field(default=0.35, alias="RETRIEVAL_CONFIDENCE_FLOOR")
+    session_ttl_hours: int = Field(default=24, alias="SESSION_TTL_HOURS")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

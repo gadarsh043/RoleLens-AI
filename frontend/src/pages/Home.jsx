@@ -1,6 +1,11 @@
 import { useEffect, useState, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
-import { analyzeJobDescription, fetchResumeStatus, uploadResume } from "../api/client";
+import {
+  analyzeJobDescription,
+  fetchAnalysisContext,
+  fetchResumeStatus,
+  uploadResume,
+} from "../api/client";
 import JobDescInput from "../components/JobDescInput";
 import ResumeUpload from "../components/ResumeUpload";
 
@@ -29,6 +34,14 @@ export default function Home() {
           setResumeStatus({ indexed: false });
         }
       });
+
+    fetchAnalysisContext()
+      .then((context) => {
+        if (!ignore && context?.job_description?.text) {
+          setJobDescription(context.job_description.text);
+        }
+      })
+      .catch(() => {});
 
     return () => {
       ignore = true;
@@ -119,10 +132,10 @@ export default function Home() {
     <main className="page-shell">
       <section className="hero">
         <p className="eyebrow">RoleLens AI</p>
-        <h1>Resume fit analysis grounded in your actual resume text.</h1>
+        <h1>Resume and job-fit analysis grounded in your actual documents.</h1>
         <p className="lede">
-          Upload a PDF, paste a job description, and compare your profile against the role using
-          retrieval-backed analysis.
+          Upload a PDF, paste a job description, and compare your profile against the role with
+          retrieval-backed analysis and grounded follow-up chat.
         </p>
       </section>
 
@@ -130,6 +143,7 @@ export default function Home() {
         <ResumeUpload
           file={selectedFile}
           indexedResume={resumeStatus.resume}
+          chunksIndexed={resumeStatus.chunks_indexed}
           isUploading={isUploading}
           onFileChange={handleFileChange}
           errorMessage={uploadError}

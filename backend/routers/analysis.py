@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from services.groq_service import get_groq_service
 from services.rag_service import get_rag_service
+from services.session import get_session_id
 from services.settings import get_settings
 
 router = APIRouter()
@@ -22,16 +23,83 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list)
 
 
+JOB_ONLY_HINTS = (
+    "sponsor",
+    "sponsorship",
+    "visa",
+    "h-1b",
+    "stem opt",
+    "opt",
+    "work authorization",
+    "qualification",
+    "qualifications",
+    "responsibilities",
+    "role require",
+    "required",
+    "job require",
+    "what does this job",
+    "what are the roles",
+    "company",
+    "company name",
+    "about the company",
+    "tell me about the company",
+    "employer",
+    "location",
+    "salary",
+)
+COMPARISON_HINTS = (
+    "fit",
+    "suitable",
+    "qualified",
+    "match",
+    "should i apply",
+    "should i go for",
+    "should i take",
+    "my chances",
+    "what are my chances",
+    "chance of getting",
+    "chance of getting the job",
+    "will i get",
+    "can i get",
+    "can i land",
+    "do i stand a chance",
+    "worth applying",
+    "worth it for me",
+    "good job for me",
+    "good for me",
+    "is the job good",
+    "is this job good",
+    "best in that",
+    "best thing about this job for me",
+    "good for me",
+    "right for me",
+    "compare",
+    "am i",
+    "do i have",
+    "gap",
+    "eligible for this role",
+)
+
+
 @router.post("/analyze")
-async def analyze_resume(payload: AnalyzeRequest):
+async def analyze_resume(
+    payload: AnalyzeRequest,
+    session_id: str = Depends(get_session_id),
+):
     rag_service = get_rag_service()
-    if not rag_service.has_indexed_resume():
+    rag_service.prepare_session(session_id)
+    rag_service.index_job_description(session_id, payload.job_description)
+    if not rag_service.has_indexed_resume(session_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Upload and index a resume before running analysis.",
         )
 
-    retrieved_chunks = rag_service.retrieve_relevant_chunks(payload.job_description)
+    retrieved_chunks = rag_service.retrieve_relevant_chunks(
+        session_id,
+        payload.job_description,
+        document_type="resume",
+    )
     if not retrieved_chunks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -91,30 +159,85 @@ async def analyze_resume(payload: AnalyzeRequest):
         ) from exc
 
 
-@router.post("/chat")
-async def chat_with_resume(payload: ChatRequest):
+@router.get("/context")
+async def analysis_context(session_id: str = Depends(get_session_id)):
     rag_service = get_rag_service()
-    if not rag_service.has_indexed_resume():
+    rag_service.prepare_session(session_id)
+    job_status = rag_service.get_job_description_status(session_id)
+    return {
+        "job_indexed": job_status["indexed"],
+        "chunks_indexed": job_status["chunks_indexed"],
+        "job_description": job_status["job_description"],
+    }
+
+
+@router.post("/chat")
+async def chat_with_resume(
+    payload: ChatRequest,
+    session_id: str = Depends(get_session_id),
+):
+    rag_service = get_rag_service()
+    rag_service.prepare_session(session_id)
+    if not rag_service.has_indexed_resume(session_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Upload and index a resume before starting chat.",
         )
 
-    retrieved_chunks = rag_service.retrieve_relevant_chunks(payload.prompt)
+    groq_service = get_groq_service()
+    intent = classify_chat_intent(payload.prompt)
+    if intent is None:
+        try:
+            intent = groq_service.route_chat_scope(
+                payload.prompt,
+                [message.model_dump() for message in payload.history],
+            )
+        except ValueError:
+            intent = "comparison"
+
+    if intent != "resume" and not rag_service.has_indexed_job_description(session_id):
+        return {
+            "answer": "There is no active job description in this session yet. Paste one and run analysis first.",
+            "follow_up_suggestions": [
+                "Paste the target job description and click Analyze.",
+                "Ask about your resume only.",
+                "Re-run analysis for the current role.",
+            ],
+            "sources": [],
+            "retrieval": [],
+            "scope": intent,
+        }
+
+    resume_chunks = []
+    job_chunks = []
+    if intent in {"resume", "comparison"}:
+        resume_chunks = rag_service.retrieve_relevant_chunks(
+            session_id,
+            payload.prompt,
+            document_type="resume",
+        )
+    if intent in {"job", "comparison"}:
+        job_chunks = rag_service.retrieve_relevant_chunks(
+            session_id,
+            payload.prompt,
+            document_type="job_description",
+        )
+
+    retrieved_chunks = resume_chunks + job_chunks
     if not retrieved_chunks:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No resume content was retrieved for this prompt.",
+            detail="No relevant resume or job-description content was retrieved for this prompt.",
         )
 
     settings = get_settings()
     average_confidence = sum(chunk["confidence"] or 0 for chunk in retrieved_chunks) / len(retrieved_chunks)
     if average_confidence < settings.retrieval_confidence_floor:
         return {
-            "answer": "I could not find strong enough evidence in the indexed resume to answer that reliably.",
+            "answer": "I could not find strong enough evidence in the stored resume or job description to answer that reliably.",
             "follow_up_suggestions": [
                 "Ask about a specific skill or project.",
-                "Paste a more targeted job description.",
+                "Ask about a specific job requirement or policy.",
                 "Upload a clearer resume PDF if extraction was incomplete.",
             ],
             "sources": [],
@@ -126,14 +249,16 @@ async def chat_with_resume(payload: ChatRequest):
                 }
                 for chunk in retrieved_chunks
             ],
+            "scope": intent,
         }
 
     try:
-        groq_service = get_groq_service()
         return groq_service.chat(
             payload.prompt,
-            retrieved_chunks,
+            resume_chunks,
+            job_chunks,
             [message.model_dump() for message in payload.history],
+            intent=intent,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -147,14 +272,26 @@ async def chat_with_resume(payload: ChatRequest):
         ) from exc
 
 
-@router.get("/history")
-async def analysis_history():
-    return {"items": []}
+def classify_chat_intent(prompt: str) -> str | None:
+    normalized = prompt.lower()
+    if any(hint in normalized for hint in JOB_ONLY_HINTS):
+        return "job"
+    if any(hint in normalized for hint in COMPARISON_HINTS):
+        return "comparison"
+    if any(hint in normalized for hint in RESUME_ONLY_HINTS):
+        return "resume"
+    return None
 
 
-@router.post("/report")
-async def analysis_report():
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Report generation is not implemented yet.",
-    )
+RESUME_ONLY_HINTS = (
+    "my resume",
+    "my experience",
+    "my background",
+    "my project",
+    "my projects",
+    "my skill",
+    "my skills",
+    "my education",
+    "my work history",
+    "my profile",
+)

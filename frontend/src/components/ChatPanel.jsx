@@ -2,6 +2,7 @@ export default function ChatPanel({
   messages,
   inputValue,
   onInputChange,
+  onInputKeyDown,
   onAsk,
   onReanalyze,
   isLoading,
@@ -22,7 +23,7 @@ export default function ChatPanel({
       ) : (
         <div className="chat-header">
           <div className="chat-heading">
-            <p className="panel-label">Resume Q&A</p>
+            <p className="panel-label">Grounded Q&A</p>
             <h3>Ask follow-up questions or run a new analysis</h3>
           </div>
           <button className="ghost-button" type="button" onClick={onToggleCollapse}>
@@ -34,8 +35,8 @@ export default function ChatPanel({
       {!isCollapsed ? (
         <>
           <p className="helper-copy">
-            `Ask` keeps the current fit score. `Reanalyze JD` intentionally replaces the dashboard with a
-            new job-description analysis.
+            `Ask` can answer from your resume, the active job description, or both. `Reanalyze JD`
+            replaces the dashboard with a new job-description analysis.
           </p>
 
           <div className="chat-thread">
@@ -46,6 +47,18 @@ export default function ChatPanel({
               >
                 <p className="chat-role">{message.role === "user" ? "You" : "RoleLens"}</p>
                 <p>{message.content}</p>
+                {message.role === "assistant" && (message.scope || message.sourceTypes?.length) ? (
+                  <div className="source-row">
+                    {message.scope ? (
+                      <span className="source-chip primary">{formatScopeLabel(message.scope)}</span>
+                    ) : null}
+                    {message.sourceTypes?.map((sourceType) => (
+                      <span className="source-chip" key={sourceType}>
+                        {formatSourceTypeLabel(sourceType)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
                 {message.followUpSuggestions?.length ? (
                   <div className="suggestion-row">
                     {message.followUpSuggestions.map((suggestion) => (
@@ -57,6 +70,16 @@ export default function ChatPanel({
                 ) : null}
               </article>
             ))}
+            {isLoading ? (
+              <article className="chat-message assistant is-loading">
+                <p className="chat-role">RoleLens</p>
+                <div className="typing-loader" aria-label="RoleLens is responding" role="status">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </article>
+            ) : null}
           </div>
 
           <div className="chat-compose">
@@ -65,7 +88,8 @@ export default function ChatPanel({
               rows={4}
               value={inputValue}
               onChange={onInputChange}
-              placeholder="Ask about the current analysis, or paste a new job description and click Reanalyze JD."
+              onKeyDown={onInputKeyDown}
+              placeholder="Ask about your resume, the current job description, or your fit. Paste a new JD and click Reanalyze JD."
             />
             <div className="chat-actions">
               <button className="ghost-button" type="button" onClick={onReanalyze} disabled={isLoading}>
@@ -82,4 +106,24 @@ export default function ChatPanel({
       ) : null}
     </aside>
   );
+}
+
+function formatScopeLabel(scope) {
+  if (scope === "comparison") {
+    return "Comparison Answer";
+  }
+  if (scope === "job") {
+    return "Job Facts";
+  }
+  return "Resume Facts";
+}
+
+function formatSourceTypeLabel(sourceType) {
+  if (sourceType === "job_description") {
+    return "JD Evidence";
+  }
+  if (sourceType === "resume") {
+    return "Resume Evidence";
+  }
+  return "Evidence";
 }

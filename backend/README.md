@@ -1,6 +1,6 @@
 # Backend
 
-FastAPI service for resume upload, PDF parsing, chunking, embeddings, Chroma persistence, retrieval, and Groq-based analysis.
+FastAPI service for resume upload, job-description persistence, chunking, embeddings, Chroma persistence, retrieval, session management, and Groq-based analysis.
 
 ## Requirements
 
@@ -43,6 +43,7 @@ CHROMA_COLLECTION_NAME=resume_chunks
 RETRIEVAL_TOP_K=5
 GROQ_MODEL=llama-3.3-70b-versatile
 RETRIEVAL_CONFIDENCE_FLOOR=0.35
+SESSION_TTL_HOURS=24
 ```
 
 ## Run
@@ -90,12 +91,15 @@ CHROMA_COLLECTION_NAME=resume_chunks
 RETRIEVAL_TOP_K=5
 GROQ_MODEL=llama-3.3-70b-versatile
 RETRIEVAL_CONFIDENCE_FLOOR=0.35
+SESSION_TTL_HOURS=24
 ```
 
 Notes for Railway:
 
 - Mount a persistent volume and point `CHROMA_PERSIST_PATH` and `UPLOAD_DIR` into that volume, for example `/data/...`.
-- Without a persistent volume, Chroma data and uploaded PDFs will be lost on redeploy or restart.
+- Without a persistent volume, Chroma data and session-scoped uploaded files will be lost on redeploy or restart.
+- Session data now lives under `UPLOAD_DIR/sessions/<session_id>/...`.
+- `SESSION_TTL_HOURS` controls how long inactive sessions stay on disk before lazy cleanup removes them.
 - `GROQ_API_KEY` is required for both `/api/analysis/analyze` and `/api/analysis/chat`.
 
 ## Main Endpoints
@@ -110,6 +114,6 @@ Notes for Railway:
 
 - The first embedding/model use may download local model files for `sentence-transformers`.
 - Resume vectors persist under `CHROMA_PERSIST_PATH`.
-- Uploaded PDFs persist under `UPLOAD_DIR`.
+- Session-scoped resume PDFs and job-description manifests persist under `UPLOAD_DIR/sessions/`.
 - If analysis fails, verify the Groq key and model name in `.env`.
-- `/api/analysis/chat` supports follow-up Q&A against the already indexed resume. Each prompt is embedded and retrieved against Chroma before Groq answers.
+- `/api/analysis/chat` supports follow-up Q&A about the resume, the active job description, or a comparison of both. Each prompt is embedded and retrieved against the relevant session-scoped documents before Groq answers.

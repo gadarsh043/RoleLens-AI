@@ -66,7 +66,7 @@ resume-fit/
 | `POST` | `/api/resume/upload` | Upload PDF → chunk → embed into ChromaDB |
 | `GET` | `/api/resume/status` | Check if resume is indexed |
 | `POST` | `/api/analysis/analyze` | Submit JD → fit score + gaps |
-| `POST` | `/api/analysis/chat` | Ask follow-up questions or paste another JD against the indexed resume |
+| `POST` | `/api/analysis/chat` | Ask follow-up questions about the resume, the active JD, or both |
 | `GET` | `/api/analysis/history` | Past analyses |
 | `POST` | `/api/analysis/report` | Generate PDF summary |
 
@@ -93,7 +93,7 @@ Each end-user interaction follows this pattern:
 3. The backend **queries ChromaDB** for the nearest resume chunks by cosine similarity.
 4. The backend **retrieves top-k chunks** with section metadata.
 5. The backend sends **the question plus retrieved chunks** to the Groq model.
-6. The model returns an answer **grounded in retrieved data** (JSON for analysis endpoints, concise grounded JSON for chat/Q&A).
+6. The model returns an answer **grounded in retrieved data** (resume chunks, job-description chunks, or both depending on the question).
 
 Implementation notes:
 
@@ -101,7 +101,8 @@ Implementation notes:
 - Chunk metadata (section, similarity or confidence score) is included in the prompt context.
 - A fixed `k` (for example 5) is used initially, then tuned against token budget and quality.
 - When retrieval confidence is low, the system returns a guarded or fallback response instead of a falsely confident answer.
-- The indexed resume remains available after the first analysis so users can ask multiple follow-up questions or compare multiple JDs in sequence.
+- The indexed resume remains available after the first analysis so users can ask multiple follow-up questions, inspect job requirements, or compare multiple JDs in sequence.
+- The active job description is also persisted per session so follow-up chat can answer job-only and comparison questions.
 
 ---
 
@@ -167,7 +168,7 @@ Two-panel layout: drag-and-drop resume upload (left) + JD textarea with auto-det
 - **Skill match bars** — horizontal bars; green = matched, red = missing; sorted by importance.
 - **Gap heatmap** — table of missing skills with Critical / High / Medium badges.
 - **AI recs panel** — three cards: what to add, how to reframe experience, what to learn.
-- **Chat panel** — ask follow-up questions or paste another JD; each turn re-runs retrieval against the same indexed resume.
+- **Chat panel** — ask follow-up questions about the resume, the active job description, or the fit between them; each turn re-runs retrieval against the relevant stored session documents.
 - **Export** — PDF download of full analysis.
 
 ---
